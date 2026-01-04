@@ -1,5 +1,5 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, Menu } from 'obsidian';
-import { AI_PROVIDERS, Message } from './ai-providers';
+import { AI_PROVIDERS, Message, AIError } from './ai-providers';
 
 interface AIAssistantSettings {
 	selectedProvider: string;
@@ -162,6 +162,9 @@ class AIAssistantModal extends Modal {
 	inputContainer: HTMLElement;
 	textArea: HTMLTextAreaElement;
 	sendButton: HTMLButtonElement;
+	cancelButton?: HTMLButtonElement;
+	abortController?: AbortController;
+	systemMessageAdded = false;
 
 	constructor(app: App, plugin: AIAssistantPlugin, editor?: Editor, initialPrompt?: string) {
 		super(app);
@@ -234,10 +237,17 @@ class AIAssistantModal extends Modal {
 		this.createQuickActionButton(actionContainer, 'Expand', 'Expand on the selected text with more details and examples.');
 		this.createQuickActionButton(actionContainer, 'Simplify', 'Simplify the selected text to make it easier to understand.');
 
-		// If there's an initial prompt, send it automatically
+		// If there's an initial prompt, display it but don't auto-send
 		if (this.conversationHistory.length > 0) {
 			this.displayMessage(this.conversationHistory[0]);
-			this.sendMessage();
+			// Optionally add a send button to proceed
+			const sendInitialButton = actionContainer.createEl('button', { text: 'Send Request' });
+			sendInitialButton.style.padding = '0.5em 1em';
+			sendInitialButton.style.fontWeight = 'bold';
+			sendInitialButton.addEventListener('click', () => {
+				this.sendMessage();
+				sendInitialButton.remove();
+			});
 		}
 
 		// Focus on text area
@@ -289,7 +299,7 @@ class AIAssistantModal extends Modal {
 
 	async sendMessage() {
 		const userMessage = this.textArea.value.trim();
-		if (!userMessage) {
+		if (!userMessage && this.conversationHistory.length === 0) {
 			new Notice('Please enter a message');
 			return;
 		}
@@ -301,34 +311,48 @@ class AIAssistantModal extends Modal {
 			return;
 		}
 
-		// Add user message to history
-		const message: Message = {
-			role: 'user',
-			content: userMessage
-		};
-
-		this.conversationHistory.push(message);
-		this.displayMessage(message);
+		// Add user message to history if there's new input
+		if (userMessage) {
+			const message: Message = {
+				role: 'user',
+				content: userMessage
+			};
+			this.conversationHistory.push(message);
+			this.displayMessage(message);
+		}
 
 		// Clear input
 		this.textArea.value = '';
 		this.sendButton.disabled = true;
+		this.textArea.disabled = true;
 		this.sendButton.textContent = 'Thinking...';
 
+		// Create abort controller for cancellation
+		this.abortController = new AbortController();
+
+		// Show cancel button
+		if (!this.cancelButton) {
+			this.cancelButton = this.inputContainer.createEl('button', { text: 'Cancel' });
+			this.cancelButton.style.padding = '0.5em 1em';
+			this.cancelButton.addEventListener('click', () => this.cancelRequest());
+		}
+		this.cancelButton.style.display = 'block';
+
 		try {
-			// Add system message if this is the first message
+			// Add system message only once
 			const messages = [...this.conversationHistory];
-			if (messages.length === 1 || !messages.some(m => m.role === 'system')) {
+			if (!this.systemMessageAdded) {
 				messages.unshift({
 					role: 'system',
 					content: 'You are a helpful AI assistant integrated into Obsidian, a note-taking app. Help the user edit, create, organize, and manipulate their text. Be concise and helpful. When editing text, provide the edited version clearly.'
 				});
+				this.systemMessageAdded = true;
 			}
 
 			// Send to AI
 			const provider = AI_PROVIDERS[this.plugin.settings.selectedProvider];
 			const model = this.plugin.getModel();
-			const response = await provider.sendMessage(apiKey, messages, model);
+			const response = await provider.sendMessage(apiKey, messages, model, this.abortController.signal);
 
 			// Add AI response to history
 			const aiMessage: Message = {
@@ -345,12 +369,33 @@ class AIAssistantModal extends Modal {
 			}
 
 		} catch (error) {
-			new Notice(`Error: ${error.message}`);
-			console.error('AI Assistant error:', error);
+			if (error instanceof Error && error.name === 'AbortError') {
+				new Notice('Request cancelled');
+			} else if (error instanceof AIError) {
+				new Notice(`${error.provider} API Error: ${error.statusCode || 'Unknown'}`);
+				console.error('AI Assistant error:', error);
+			} else if (error instanceof Error) {
+				new Notice(`Error: ${error.message}`);
+				console.error('AI Assistant error:', error);
+			} else {
+				new Notice('An unknown error occurred');
+				console.error('AI Assistant error:', error);
+			}
 		} finally {
 			this.sendButton.disabled = false;
+			this.textArea.disabled = false;
 			this.sendButton.textContent = 'Send';
+			if (this.cancelButton) {
+				this.cancelButton.style.display = 'none';
+			}
+			this.abortController = undefined;
 			this.textArea.focus();
+		}
+	}
+
+	cancelRequest() {
+		if (this.abortController) {
+			this.abortController.abort();
 		}
 	}
 
@@ -396,6 +441,12 @@ class AIAssistantModal extends Modal {
 	}
 
 	onClose() {
+		// Cancel any ongoing request
+		if (this.abortController) {
+			this.abortController.abort();
+		}
+
+		// Clean up
 		const { contentEl } = this;
 		contentEl.empty();
 	}
@@ -438,13 +489,15 @@ class AIAssistantSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName('Anthropic API Key')
 				.setDesc('Enter your Anthropic API key from console.anthropic.com')
-				.addText(text => text
-					.setPlaceholder('sk-ant-...')
-					.setValue(this.plugin.settings.anthropicApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.anthropicApiKey = value;
-						await this.plugin.saveSettings();
-					}));
+				.addText(text => {
+					text.setPlaceholder('sk-ant-...')
+						.setValue(this.plugin.settings.anthropicApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.anthropicApiKey = value;
+							await this.plugin.saveSettings();
+						});
+					text.inputEl.type = 'password';
+				});
 
 			new Setting(containerEl)
 				.setName('Model')
@@ -467,13 +520,15 @@ class AIAssistantSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName('OpenAI API Key')
 				.setDesc('Enter your OpenAI API key from platform.openai.com')
-				.addText(text => text
-					.setPlaceholder('sk-...')
-					.setValue(this.plugin.settings.openaiApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.openaiApiKey = value;
-						await this.plugin.saveSettings();
-					}));
+				.addText(text => {
+					text.setPlaceholder('sk-...')
+						.setValue(this.plugin.settings.openaiApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.openaiApiKey = value;
+							await this.plugin.saveSettings();
+						});
+					text.inputEl.type = 'password';
+				});
 
 			new Setting(containerEl)
 				.setName('Model')
@@ -496,13 +551,15 @@ class AIAssistantSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName('Gemini API Key')
 				.setDesc('Enter your Google AI API key from aistudio.google.com')
-				.addText(text => text
-					.setPlaceholder('AIza...')
-					.setValue(this.plugin.settings.geminiApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.geminiApiKey = value;
-						await this.plugin.saveSettings();
-					}));
+				.addText(text => {
+					text.setPlaceholder('AIza...')
+						.setValue(this.plugin.settings.geminiApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.geminiApiKey = value;
+							await this.plugin.saveSettings();
+						});
+					text.inputEl.type = 'password';
+				});
 
 			new Setting(containerEl)
 				.setName('Model')
@@ -525,13 +582,15 @@ class AIAssistantSettingTab extends PluginSettingTab {
 			new Setting(containerEl)
 				.setName('OpenRouter API Key')
 				.setDesc('Enter your OpenRouter API key from openrouter.ai')
-				.addText(text => text
-					.setPlaceholder('sk-or-...')
-					.setValue(this.plugin.settings.openrouterApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.openrouterApiKey = value;
-						await this.plugin.saveSettings();
-					}));
+				.addText(text => {
+					text.setPlaceholder('sk-or-...')
+						.setValue(this.plugin.settings.openrouterApiKey)
+						.onChange(async (value) => {
+							this.plugin.settings.openrouterApiKey = value;
+							await this.plugin.saveSettings();
+						});
+					text.inputEl.type = 'password';
+				});
 
 			new Setting(containerEl)
 				.setName('Model')

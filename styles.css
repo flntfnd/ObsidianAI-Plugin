@@ -2,6 +2,11 @@
 
 .ai-assistant-modal {
     min-width: 600px;
+    max-width: 800px;
+}
+
+.ai-assistant-modal .modal-content {
+    padding: 1em;
 }
 
 .ai-chat-container {
@@ -56,6 +61,11 @@
     cursor: not-allowed;
 }
 
+.ai-input-container textarea:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
 .ai-action-container {
     border-top: 1px solid var(--background-modifier-border);
     padding-top: 1em;
@@ -98,4 +108,24 @@
 
 .ai-chat-container::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* Loading state */
+.ai-message.loading {
+    opacity: 0.7;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .ai-assistant-modal {
+        min-width: 90vw;
+    }
+
+    .ai-action-container {
+        flex-direction: column;
+    }
+
+    .ai-action-container button {
+        width: 100%;
+    }
 }
