@@ -115,6 +115,62 @@
     opacity: 0.7;
 }
 
+/* Speech UI elements */
+.ai-button-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.ai-mic-button {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1.2em;
+}
+
+.ai-mic-button:hover {
+    background: var(--interactive-accent-hover);
+    transform: scale(1.05);
+}
+
+.ai-mic-button.ai-mic-listening {
+    background: var(--text-error);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.ai-speaker-button {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.ai-speaker-button:hover {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    transform: scale(1.1);
+}
+
+.ai-speaker-button:active {
+    transform: scale(0.95);
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     .ai-assistant-modal {
@@ -127,5 +183,9 @@
 
     .ai-action-container button {
         width: 100%;
+    }
+
+    .ai-button-container {
+        width: auto;
     }
 }

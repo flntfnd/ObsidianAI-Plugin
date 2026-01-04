@@ -1,7 +1,8 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, Menu } from 'obsidian';
 import { AI_PROVIDERS, Message, AIError } from './ai-providers';
+import { SpeechRecognitionService, TextToSpeechService, SpeechSettings } from './speech-service';
 
-interface AIAssistantSettings {
+interface AIAssistantSettings extends SpeechSettings {
 	selectedProvider: string;
 	anthropicApiKey: string;
 	openaiApiKey: string;
@@ -22,7 +23,13 @@ const DEFAULT_SETTINGS: AIAssistantSettings = {
 	anthropicModel: 'claude-3-5-sonnet-20241022',
 	openaiModel: 'gpt-4o',
 	geminiModel: 'gemini-2.0-flash-exp',
-	openrouterModel: 'anthropic/claude-3.5-sonnet'
+	openrouterModel: 'anthropic/claude-3.5-sonnet',
+	enableSpeechRecognition: true,
+	enableTextToSpeech: true,
+	speechLanguage: 'en-US',
+	voiceName: undefined,
+	voiceRate: 1.0,
+	voicePitch: 1.0
 };
 
 export default class AIAssistantPlugin extends Plugin {
@@ -163,13 +170,19 @@ class AIAssistantModal extends Modal {
 	textArea: HTMLTextAreaElement;
 	sendButton: HTMLButtonElement;
 	cancelButton?: HTMLButtonElement;
+	micButton?: HTMLButtonElement;
+	speakerButton?: HTMLButtonElement;
 	abortController?: AbortController;
 	systemMessageAdded = false;
+	speechRecognition: SpeechRecognitionService;
+	textToSpeech: TextToSpeechService;
 
 	constructor(app: App, plugin: AIAssistantPlugin, editor?: Editor, initialPrompt?: string) {
 		super(app);
 		this.plugin = plugin;
 		this.editor = editor;
+		this.speechRecognition = new SpeechRecognitionService();
+		this.textToSpeech = new TextToSpeechService();
 
 		if (initialPrompt) {
 			this.conversationHistory.push({
@@ -209,9 +222,23 @@ class AIAssistantModal extends Modal {
 		this.textArea.style.resize = 'vertical';
 		this.textArea.style.padding = '0.5em';
 
+		// Create button container
+		const buttonContainer = this.inputContainer.createDiv('ai-button-container');
+		buttonContainer.style.display = 'flex';
+		buttonContainer.style.flexDirection = 'column';
+		buttonContainer.style.gap = '0.5em';
+
+		// Create microphone button if speech recognition is enabled
+		if (this.plugin.settings.enableSpeechRecognition && this.speechRecognition.isSupported()) {
+			this.micButton = buttonContainer.createEl('button', { text: '🎤' });
+			this.micButton.addClass('ai-mic-button');
+			this.micButton.style.padding = '0.5em';
+			this.micButton.title = 'Voice input (click to speak)';
+			this.micButton.addEventListener('click', () => this.toggleSpeechRecognition());
+		}
+
 		// Create send button
-		this.sendButton = this.inputContainer.createEl('button', { text: 'Send' });
-		this.sendButton.style.alignSelf = 'flex-end';
+		this.sendButton = buttonContainer.createEl('button', { text: 'Send' });
 		this.sendButton.style.padding = '0.5em 1.5em';
 
 		this.sendButton.addEventListener('click', () => this.sendMessage());
@@ -278,6 +305,9 @@ class AIAssistantModal extends Modal {
 		messageEl.style.marginBottom = '1em';
 		messageEl.style.padding = '0.5em';
 		messageEl.style.borderRadius = '5px';
+		messageEl.style.display = 'flex';
+		messageEl.style.justifyContent = 'space-between';
+		messageEl.style.alignItems = 'flex-start';
 
 		if (message.role === 'user') {
 			messageEl.style.backgroundColor = 'var(--background-secondary)';
@@ -287,11 +317,35 @@ class AIAssistantModal extends Modal {
 			messageEl.style.marginRight = '2em';
 		}
 
-		const roleEl = messageEl.createEl('strong');
+		const contentWrapper = messageEl.createDiv();
+		contentWrapper.style.flex = '1';
+
+		const roleEl = contentWrapper.createEl('strong');
 		roleEl.textContent = message.role === 'user' ? 'You: ' : 'AI: ';
 
-		const contentEl = messageEl.createEl('span');
+		const contentEl = contentWrapper.createEl('span');
 		contentEl.textContent = message.content;
+
+		// Add speaker button for AI messages if TTS is enabled
+		if (message.role === 'assistant' && this.plugin.settings.enableTextToSpeech && this.textToSpeech.isSupported()) {
+			const speakerBtn = messageEl.createEl('button', { text: '🔊' });
+			speakerBtn.addClass('ai-speaker-button');
+			speakerBtn.style.padding = '0.3em 0.5em';
+			speakerBtn.style.fontSize = '0.9em';
+			speakerBtn.style.marginLeft = '0.5em';
+			speakerBtn.title = 'Read aloud';
+			speakerBtn.addEventListener('click', () => {
+				if (this.textToSpeech.getIsSpeaking()) {
+					this.textToSpeech.stop();
+					speakerBtn.textContent = '🔊';
+				} else {
+					this.textToSpeech.speak(message.content, this.plugin.settings, () => {
+						speakerBtn.textContent = '🔊';
+					});
+					speakerBtn.textContent = '⏸️';
+				}
+			});
+		}
 
 		// Scroll to bottom
 		this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
@@ -399,6 +453,31 @@ class AIAssistantModal extends Modal {
 		}
 	}
 
+	toggleSpeechRecognition() {
+		if (!this.micButton) return;
+
+		if (this.speechRecognition.getIsListening()) {
+			this.speechRecognition.stopListening();
+			this.micButton.textContent = '🎤';
+			this.micButton.removeClass('ai-mic-listening');
+		} else {
+			this.micButton.textContent = '⏺️';
+			this.micButton.addClass('ai-mic-listening');
+			this.speechRecognition.startListening(
+				this.plugin.settings.speechLanguage,
+				(transcript) => {
+					this.textArea.value = transcript;
+				},
+				() => {
+					if (this.micButton) {
+						this.micButton.textContent = '🎤';
+						this.micButton.removeClass('ai-mic-listening');
+					}
+				}
+			);
+		}
+	}
+
 	offerTextAction(text: string) {
 		const actionEl = this.chatContainer.createDiv('ai-action-buttons');
 		actionEl.style.marginTop = '0.5em';
@@ -444,6 +523,14 @@ class AIAssistantModal extends Modal {
 		// Cancel any ongoing request
 		if (this.abortController) {
 			this.abortController.abort();
+		}
+
+		// Stop speech services
+		if (this.speechRecognition.getIsListening()) {
+			this.speechRecognition.stopListening();
+		}
+		if (this.textToSpeech.getIsSpeaking()) {
+			this.textToSpeech.stop();
 		}
 
 		// Clean up
@@ -604,6 +691,77 @@ class AIAssistantSettingTab extends PluginSettingTab {
 					}));
 		}
 
+		// Speech settings
+		containerEl.createEl('h3', { text: 'Speech Settings' });
+
+		new Setting(containerEl)
+			.setName('Enable Speech Recognition')
+			.setDesc('Allow voice input using your microphone')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableSpeechRecognition)
+				.onChange(async (value) => {
+					this.plugin.settings.enableSpeechRecognition = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Enable Text-to-Speech')
+			.setDesc('Allow AI responses to be read aloud')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableTextToSpeech)
+				.onChange(async (value) => {
+					this.plugin.settings.enableTextToSpeech = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Speech Language')
+			.setDesc('Language for speech recognition and text-to-speech')
+			.addDropdown(dropdown => dropdown
+				.addOption('en-US', 'English (US)')
+				.addOption('en-GB', 'English (UK)')
+				.addOption('es-ES', 'Spanish (Spain)')
+				.addOption('es-MX', 'Spanish (Mexico)')
+				.addOption('fr-FR', 'French')
+				.addOption('de-DE', 'German')
+				.addOption('it-IT', 'Italian')
+				.addOption('pt-BR', 'Portuguese (Brazil)')
+				.addOption('pt-PT', 'Portuguese (Portugal)')
+				.addOption('ru-RU', 'Russian')
+				.addOption('ja-JP', 'Japanese')
+				.addOption('ko-KR', 'Korean')
+				.addOption('zh-CN', 'Chinese (Simplified)')
+				.addOption('zh-TW', 'Chinese (Traditional)')
+				.setValue(this.plugin.settings.speechLanguage)
+				.onChange(async (value) => {
+					this.plugin.settings.speechLanguage = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Voice Speed')
+			.setDesc('Speed of text-to-speech (0.5 = slow, 1.0 = normal, 2.0 = fast)')
+			.addSlider(slider => slider
+				.setLimits(0.5, 2.0, 0.1)
+				.setValue(this.plugin.settings.voiceRate)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.voiceRate = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Voice Pitch')
+			.setDesc('Pitch of text-to-speech (0.5 = low, 1.0 = normal, 2.0 = high)')
+			.addSlider(slider => slider
+				.setLimits(0.5, 2.0, 0.1)
+				.setValue(this.plugin.settings.voicePitch)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.voicePitch = value;
+					await this.plugin.saveSettings();
+				}));
+
 		// Help section
 		containerEl.createEl('h3', { text: 'Usage' });
 		const usageDiv = containerEl.createDiv();
@@ -614,6 +772,11 @@ class AIAssistantSettingTab extends PluginSettingTab {
 				<li><strong>Keyboard Shortcut:</strong> Press Ctrl/Cmd+Shift+A</li>
 				<li><strong>Right-click Menu:</strong> Right-click in the editor and select "AI Assistant"</li>
 				<li><strong>Command Palette:</strong> Search for "AI Assistant" commands</li>
+			</ul>
+			<p><strong>Speech Features:</strong></p>
+			<ul>
+				<li><strong>Voice Input:</strong> Click the microphone button (🎤) to speak your message</li>
+				<li><strong>Voice Output:</strong> Click the speaker button (🔊) on AI responses to hear them read aloud</li>
 			</ul>
 		`;
 	}
