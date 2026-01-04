@@ -21,15 +21,6 @@ A powerful AI assistant plugin for Obsidian that helps you edit, create, organiz
 
 ## Installation
 
-### From Obsidian Community Plugins (Recommended)
-
-1. Open Obsidian Settings
-2. Go to Community Plugins and disable Safe Mode
-3. Click Browse and search for "AI Assistant"
-4. Click Install and then Enable
-
-### Manual Installation
-
 1. Download the latest release from the GitHub releases page
 2. Extract the files to your vault's plugins folder: `<vault>/.obsidian/plugins/obsidian-ai-assistant/`
 3. Reload Obsidian
