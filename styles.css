@@ -115,7 +115,7 @@
     opacity: 0.7;
 }
 
-/* Speech UI elements */
+/* Voice input UI */
 .ai-button-container {
     display: flex;
     flex-direction: column;
@@ -149,26 +149,6 @@
     50% {
         opacity: 0.6;
     }
-}
-
-.ai-speaker-button {
-    background: var(--background-modifier-border);
-    color: var(--text-normal);
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-    flex-shrink: 0;
-}
-
-.ai-speaker-button:hover {
-    background: var(--interactive-accent);
-    color: var(--text-on-accent);
-    transform: scale(1.1);
-}
-
-.ai-speaker-button:active {
-    transform: scale(0.95);
 }
 
 /* Responsive design */

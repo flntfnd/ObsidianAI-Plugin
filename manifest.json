@@ -3,7 +3,7 @@
   "name": "AI Assistant",
   "version": "1.1.0",
   "minAppVersion": "0.15.0",
-  "description": "Use AI services (Anthropic, OpenAI, Gemini) to edit, create, organize, and manipulate text in your documents. Includes voice input and text-to-speech.",
+  "description": "Use AI services (Anthropic, OpenAI, Gemini) to edit, create, organize, and manipulate text in your documents. Includes voice input.",
   "author": "Your Name",
   "authorUrl": "https://github.com/flntfnd/ObsidianAI-Plugin",
   "isDesktopOnly": false

@@ -1,10 +1,6 @@
 export interface SpeechSettings {
 	enableSpeechRecognition: boolean;
-	enableTextToSpeech: boolean;
 	speechLanguage: string;
-	voiceName?: string;
-	voiceRate: number;
-	voicePitch: number;
 }
 
 export class SpeechRecognitionService {
@@ -71,88 +67,5 @@ export class SpeechRecognitionService {
 
 	getIsListening(): boolean {
 		return this.isListening;
-	}
-}
-
-export class TextToSpeechService {
-	private synthesis: SpeechSynthesis;
-	private currentUtterance?: SpeechSynthesisUtterance;
-	private isSpeaking = false;
-
-	constructor() {
-		this.synthesis = window.speechSynthesis;
-	}
-
-	isSupported(): boolean {
-		return 'speechSynthesis' in window;
-	}
-
-	getVoices(): SpeechSynthesisVoice[] {
-		return this.synthesis.getVoices();
-	}
-
-	speak(text: string, settings: SpeechSettings, onEnd?: () => void): void {
-		if (!this.isSupported() || this.isSpeaking) return;
-
-		// Cancel any ongoing speech
-		this.stop();
-
-		this.currentUtterance = new SpeechSynthesisUtterance(text);
-		this.currentUtterance.lang = settings.speechLanguage;
-		this.currentUtterance.rate = settings.voiceRate;
-		this.currentUtterance.pitch = settings.voicePitch;
-
-		// Set voice if specified
-		if (settings.voiceName) {
-			const voices = this.getVoices();
-			const voice = voices.find(v => v.name === settings.voiceName);
-			if (voice) {
-				this.currentUtterance.voice = voice;
-			}
-		}
-
-		this.currentUtterance.onstart = () => {
-			this.isSpeaking = true;
-		};
-
-		this.currentUtterance.onend = () => {
-			this.isSpeaking = false;
-			if (onEnd) onEnd();
-		};
-
-		this.currentUtterance.onerror = (event) => {
-			console.error('Text-to-speech error:', event);
-			this.isSpeaking = false;
-			if (onEnd) onEnd();
-		};
-
-		this.synthesis.speak(this.currentUtterance);
-	}
-
-	stop(): void {
-		if (this.synthesis.speaking) {
-			this.synthesis.cancel();
-			this.isSpeaking = false;
-		}
-	}
-
-	pause(): void {
-		if (this.synthesis.speaking && !this.synthesis.paused) {
-			this.synthesis.pause();
-		}
-	}
-
-	resume(): void {
-		if (this.synthesis.paused) {
-			this.synthesis.resume();
-		}
-	}
-
-	getIsSpeaking(): boolean {
-		return this.isSpeaking;
-	}
-
-	isPaused(): boolean {
-		return this.synthesis.paused;
 	}
 }

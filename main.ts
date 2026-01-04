@@ -1,6 +1,6 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, Menu } from 'obsidian';
 import { AI_PROVIDERS, Message, AIError } from './ai-providers';
-import { SpeechRecognitionService, TextToSpeechService, SpeechSettings } from './speech-service';
+import { SpeechRecognitionService, SpeechSettings } from './speech-service';
 
 interface AIAssistantSettings extends SpeechSettings {
 	selectedProvider: string;
@@ -25,11 +25,7 @@ const DEFAULT_SETTINGS: AIAssistantSettings = {
 	geminiModel: 'gemini-2.0-flash-exp',
 	openrouterModel: 'anthropic/claude-3.5-sonnet',
 	enableSpeechRecognition: true,
-	enableTextToSpeech: true,
-	speechLanguage: 'en-US',
-	voiceName: undefined,
-	voiceRate: 1.0,
-	voicePitch: 1.0
+	speechLanguage: 'en-US'
 };
 
 export default class AIAssistantPlugin extends Plugin {
@@ -171,18 +167,15 @@ class AIAssistantModal extends Modal {
 	sendButton: HTMLButtonElement;
 	cancelButton?: HTMLButtonElement;
 	micButton?: HTMLButtonElement;
-	speakerButton?: HTMLButtonElement;
 	abortController?: AbortController;
 	systemMessageAdded = false;
 	speechRecognition: SpeechRecognitionService;
-	textToSpeech: TextToSpeechService;
 
 	constructor(app: App, plugin: AIAssistantPlugin, editor?: Editor, initialPrompt?: string) {
 		super(app);
 		this.plugin = plugin;
 		this.editor = editor;
 		this.speechRecognition = new SpeechRecognitionService();
-		this.textToSpeech = new TextToSpeechService();
 
 		if (initialPrompt) {
 			this.conversationHistory.push({
@@ -305,9 +298,6 @@ class AIAssistantModal extends Modal {
 		messageEl.style.marginBottom = '1em';
 		messageEl.style.padding = '0.5em';
 		messageEl.style.borderRadius = '5px';
-		messageEl.style.display = 'flex';
-		messageEl.style.justifyContent = 'space-between';
-		messageEl.style.alignItems = 'flex-start';
 
 		if (message.role === 'user') {
 			messageEl.style.backgroundColor = 'var(--background-secondary)';
@@ -317,35 +307,11 @@ class AIAssistantModal extends Modal {
 			messageEl.style.marginRight = '2em';
 		}
 
-		const contentWrapper = messageEl.createDiv();
-		contentWrapper.style.flex = '1';
-
-		const roleEl = contentWrapper.createEl('strong');
+		const roleEl = messageEl.createEl('strong');
 		roleEl.textContent = message.role === 'user' ? 'You: ' : 'AI: ';
 
-		const contentEl = contentWrapper.createEl('span');
+		const contentEl = messageEl.createEl('span');
 		contentEl.textContent = message.content;
-
-		// Add speaker button for AI messages if TTS is enabled
-		if (message.role === 'assistant' && this.plugin.settings.enableTextToSpeech && this.textToSpeech.isSupported()) {
-			const speakerBtn = messageEl.createEl('button', { text: '🔊' });
-			speakerBtn.addClass('ai-speaker-button');
-			speakerBtn.style.padding = '0.3em 0.5em';
-			speakerBtn.style.fontSize = '0.9em';
-			speakerBtn.style.marginLeft = '0.5em';
-			speakerBtn.title = 'Read aloud';
-			speakerBtn.addEventListener('click', () => {
-				if (this.textToSpeech.getIsSpeaking()) {
-					this.textToSpeech.stop();
-					speakerBtn.textContent = '🔊';
-				} else {
-					this.textToSpeech.speak(message.content, this.plugin.settings, () => {
-						speakerBtn.textContent = '🔊';
-					});
-					speakerBtn.textContent = '⏸️';
-				}
-			});
-		}
 
 		// Scroll to bottom
 		this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
@@ -525,12 +491,9 @@ class AIAssistantModal extends Modal {
 			this.abortController.abort();
 		}
 
-		// Stop speech services
+		// Stop speech recognition if active
 		if (this.speechRecognition.getIsListening()) {
 			this.speechRecognition.stopListening();
-		}
-		if (this.textToSpeech.getIsSpeaking()) {
-			this.textToSpeech.stop();
 		}
 
 		// Clean up
@@ -692,10 +655,10 @@ class AIAssistantSettingTab extends PluginSettingTab {
 		}
 
 		// Speech settings
-		containerEl.createEl('h3', { text: 'Speech Settings' });
+		containerEl.createEl('h3', { text: 'Voice Input Settings' });
 
 		new Setting(containerEl)
-			.setName('Enable Speech Recognition')
+			.setName('Enable Voice Input')
 			.setDesc('Allow voice input using your microphone')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enableSpeechRecognition)
@@ -705,18 +668,8 @@ class AIAssistantSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Enable Text-to-Speech')
-			.setDesc('Allow AI responses to be read aloud')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.enableTextToSpeech)
-				.onChange(async (value) => {
-					this.plugin.settings.enableTextToSpeech = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Speech Language')
-			.setDesc('Language for speech recognition and text-to-speech')
+			.setName('Language')
+			.setDesc('Language for speech recognition')
 			.addDropdown(dropdown => dropdown
 				.addOption('en-US', 'English (US)')
 				.addOption('en-GB', 'English (UK)')
@@ -738,30 +691,6 @@ class AIAssistantSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		new Setting(containerEl)
-			.setName('Voice Speed')
-			.setDesc('Speed of text-to-speech (0.5 = slow, 1.0 = normal, 2.0 = fast)')
-			.addSlider(slider => slider
-				.setLimits(0.5, 2.0, 0.1)
-				.setValue(this.plugin.settings.voiceRate)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.voiceRate = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Voice Pitch')
-			.setDesc('Pitch of text-to-speech (0.5 = low, 1.0 = normal, 2.0 = high)')
-			.addSlider(slider => slider
-				.setLimits(0.5, 2.0, 0.1)
-				.setValue(this.plugin.settings.voicePitch)
-				.setDynamicTooltip()
-				.onChange(async (value) => {
-					this.plugin.settings.voicePitch = value;
-					await this.plugin.saveSettings();
-				}));
-
 		// Help section
 		containerEl.createEl('h3', { text: 'Usage' });
 		const usageDiv = containerEl.createDiv();
@@ -772,11 +701,7 @@ class AIAssistantSettingTab extends PluginSettingTab {
 				<li><strong>Keyboard Shortcut:</strong> Press Ctrl/Cmd+Shift+A</li>
 				<li><strong>Right-click Menu:</strong> Right-click in the editor and select "AI Assistant"</li>
 				<li><strong>Command Palette:</strong> Search for "AI Assistant" commands</li>
-			</ul>
-			<p><strong>Speech Features:</strong></p>
-			<ul>
-				<li><strong>Voice Input:</strong> Click the microphone button (🎤) to speak your message</li>
-				<li><strong>Voice Output:</strong> Click the speaker button (🔊) on AI responses to hear them read aloud</li>
+				<li><strong>Voice Input:</strong> Click the microphone button (🎤) to dictate your message</li>
 			</ul>
 		`;
 	}

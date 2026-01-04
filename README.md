@@ -11,11 +11,9 @@ A powerful AI assistant plugin for Obsidian that helps you edit, create, organiz
   - Right-click context menu
   - Command palette
 - **Interactive Chat Interface**: Have conversations with AI to refine your content
-- **Speech Features**:
-  - **Voice Input**: Use speech recognition to dictate your messages (click microphone button)
-  - **Voice Output**: Listen to AI responses with text-to-speech (click speaker button)
+- **Voice Input**: Use speech recognition to dictate your messages instead of typing
   - Support for 14+ languages
-  - Adjustable voice speed and pitch
+  - Click microphone button to speak
 - **Quick Actions**: One-click buttons for common tasks like improving writing, summarizing, expanding, and simplifying
 - **Text Manipulation**:
   - Edit and improve selected text
@@ -111,25 +109,17 @@ After receiving an AI response, you can:
 - **Replace Selection**: Replace the selected text with the AI response
 - **Copy to Clipboard**: Copy the response for use elsewhere
 
-### Using Speech Features
+### Using Voice Input
 
-#### Voice Input (Speech-to-Text)
 1. Click the microphone button (🎤) in the AI Assistant modal
 2. Speak your message clearly
-3. The text will appear in the input field
-4. Click Send or press Ctrl/Cmd+Enter
+3. The text will appear in the input field automatically
+4. Click Send or press Ctrl/Cmd+Enter to submit
 
-#### Voice Output (Text-to-Speech)
-1. After receiving an AI response, click the speaker button (🔊) next to the message
-2. The AI response will be read aloud
-3. Click again to stop playback
-
-#### Configuring Speech Settings
-- Go to Settings → AI Assistant → Speech Settings
-- Enable/disable speech recognition and text-to-speech
+#### Configuring Voice Input
+- Go to Settings → AI Assistant → Voice Input Settings
+- Enable/disable voice input
 - Select your preferred language (14+ languages supported)
-- Adjust voice speed (0.5x - 2.0x)
-- Adjust voice pitch (0.5 - 2.0)
 
 ### Example Prompts
 
@@ -177,7 +167,7 @@ npm run build
 
 - `main.ts`: Main plugin code with UI and commands
 - `ai-providers.ts`: AI service provider implementations
-- `speech-service.ts`: Speech recognition and text-to-speech services
+- `speech-service.ts`: Speech recognition service
 - `manifest.json`: Plugin metadata
 - `package.json`: NPM dependencies and scripts
 - `styles.css`: UI styling
@@ -219,11 +209,10 @@ npm run build
 - Try reloading Obsidian
 - Check the console for error messages (Ctrl+Shift+I or Cmd+Option+I)
 
-### Speech Features Not Working
-- **Speech Recognition**: Requires a Chromium-based browser (Chrome, Edge, etc.) or Safari. Not available in Firefox.
-- **Text-to-Speech**: Works in all modern browsers
+### Voice Input Not Working
+- Requires a Chromium-based browser (Chrome, Edge) or Safari (not available in Firefox)
 - Make sure microphone permissions are granted in your browser/OS
-- Check that speech features are enabled in plugin settings
+- Check that voice input is enabled in plugin settings
 
 ## Contributing
 
