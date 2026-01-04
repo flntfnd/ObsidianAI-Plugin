@@ -149,23 +149,9 @@ npm run build
 ## Supported AI Providers
 
 ### Anthropic (Claude)
-- Claude 3.5 Sonnet
-- Claude 3.5 Haiku
-- Claude 3 Opus
-
 ### OpenAI (GPT)
-- GPT-4o
-- GPT-4o Mini
-- GPT-4 Turbo
-
 ### Google (Gemini)
-- Gemini 2.0 Flash (Experimental)
-- Gemini 1.5 Pro
-- Gemini 1.5 Flash
-
 ### OpenRouter
-- Access to multiple models through OpenRouter's API
-- Supports any model available on OpenRouter
 
 ## Troubleshooting
 
@@ -183,9 +169,6 @@ npm run build
 - Try reloading Obsidian
 - Check the console for error messages (Ctrl+Shift+I or Cmd+Option+I)
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
@@ -194,7 +177,3 @@ MIT
 ## Support
 
 If you encounter any issues or have feature requests, please [open an issue](https://github.com/flntfnd/ObsidianAI-Plugin/issues) on GitHub.
-
-## Credits
-
-Built with the Obsidian Plugin API and powered by leading AI providers.
